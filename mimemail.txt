@@ -1,0 +1,615 @@
+*mimemail.txt* PHP MimeMail Class Documentation 1.1 - 2004-06-18
+
+Author: Jhaura Wachsman <jw at jhaurawachsman.com dot com>
+
+Documentation best viewed in VIM with the included tags file. This will allow
+keyword jumping and source file reference links to be highlighted and active.
+For more information see the VIM User Manual section 01.1.
+
+|01.1|  Class Overview
+|02.1|  Installation and Setup
+|03.1|  Core Output Methods: [hdrs2Str], [body2Str] and [all2Str]
+|04.1|  Preparing Message Bodies
+|04.2|  Generating a Plain Text Message
+|04.3|  Generating an HTML Message
+|04.4|  Generating a Multipart-Alternative MIME Message
+|05.1|  Headers - The [add] and [attr] Methods
+|05.2|  Adding Headers
+|05.3|  Retrieving Header Values
+|05.4|  Modifying Header Values
+|05.5|  Deleting Headers
+|05.6|  Formatting Headers Containing Email Addresses
+|06.1|  Sending Mail via an MDA/MTA
+|06.2|  Using PHP's mail() Function
+|07.1|  Return-Path and Bounce Addresses
+|08.1|  Printing Headers and Body as Single String [all2Str]
+|09.1|  Comments and Bugs
+
+==============================================================================
+*01.1* Class Overview                                      *mimemail-overview*
+
+Purpose: Generate RFC MIME compliant email message headers and bodies.
+
+Description:
+
+PHP class object designed to generate RFC MIME compliant email message headers
+and bodies. Supports plain text, HTML and Multipart message formats. Outputs
+RFC MIME compliant headers and bodies in string format with optional encoding.
+Integrates with PHP's mail() function and MDA/MTAs like qmail and Sendmail to
+perform message delivery.
+
+Requirements: PHP (tested with version 4).
+
+Sending a message involves passing the header and body strings (along with
+other data such as email addresses) to PHPs mail() function, MDA/MTAs such as
+Sendmail and qmail or direct delivery via SMTP using a PHP class or other
+script. See Sending Mail via an MDA/MTA |06.1| for more information.
+
+==============================================================================
+*02.1* Installation and Setup                               *mimemail-install*
+
+To install, simply include the MimeMail class source file at the top of
+a PHP script:
+
+	<?php
+		include('mimemail.class.php');
+	?>
+
+For purposes of this documentation, sample plain text and HTML messages have
+been constructed.
+
+A simple plain ascii text message body for example usage:
+
+	<?php
+		$textmsg = <<<END
+			Hello World,
+
+			Messages created with MimeMail are RFC compliant!
+
+			All the best,
+			The Author
+END;
+	?>
+
+A simple HTML message body for example usage:
+
+	<?php
+		$htmlmsg = <<<END
+			<html lang="en">
+			<head>
+			<title>PHP MimeMail Documentation</title>
+			</head>
+			<body>
+			<b>Hello World</b>,
+			<p>
+			Messages created with MimeMail are RFC compliant!
+			</p>
+			All the best,
+			<br />
+			The Author
+			</body>
+			</html>
+END;
+	?>
+
+==============================================================================
+*03.1* Core Output Methods                                   *mimemail-output*
+
+In most cases MimeMail output will be used as input into a delivery mechanism
+such as PHP's mail() function or qmail. Generally speaking these mechanisms
+receive input in two parts: headers first, then a message body. As such,
+MimeMail returns string type output corresponding to these two parts for
+direct input into these mechanisms.
+
+The [hdrs2Str] method returns the current set of headers formatted to RFC
+specifications in string format with each header separated by a newline
+(including the final header, the trailing newline may need to be trimmed with
+some mechanisms).
+
+The [body2Str] method returns the current message body formatted in single or
+multipart MIME format. If the body is multipart there will be two trailing
+newlines after the final boundary delimiter which should not be removed per
+RFC 2046 5.1.1.
+
+The [all2Str] method returns the current message headers and body separated by
+a single blank line. This method has no known implementation in a delivery
+mechanism, but is provided for use when output is displayed directly to a
+screen or file.
+
+==============================================================================
+*04.1* Preparing Message Bodies                                *mimemail-prep*
+
+It is recommended that all text message bodies be hard-wrapped at 76-78
+characters or less for backwards compatibility with console-type MUAs (RFC
+2822 2.1.1 and RFC 2821 4.5.3.1). Currently wrapping must be done outside of
+MimeMail using PHP's wordwrap() function or similar.
+
+If the HTML body has lines longer than 998 characters it is recommended that
+the quoted-printable encoding be used to avoid the very serious possibility of
+truncation (ibid). MimeMail has a built-in quoted-printable encoding method
+that is automatically called when a message part has the MIME
+Content-Transfer-Encoding header type set to 'quoted-printable.' Because of
+this it is not possible to pre-encode a message body using another
+quoted-printable function. Future versions may provide a switch to turn off
+automatic internal encoding.
+
+==============================================================================
+*04.2* Generating a Plain Text Message                      *mimemail-textmsg*
+
+The simplest mime construct, this example demonstrates how to create a plain
+text mime object using the simple text message (|02.1|):
+
+A new object is created by calling the class constructor using plain text MIME
+argument values. This example shows the common headers and values used in a
+simple plain text message (strictly speaking, plain text email does not
+require any MIME headers):
+
+	<?php
+		$tmime =& new MimeMail(array(
+			'type'     => 'text/plain', # content-type header
+			'data'     => $textmsg,     # plain text message body
+			'charset'  => 'us-ascii',   # charset used in message body
+			'encoding' => '7bit'));     # encoding of message body
+	?>
+
+The the object now has all the basic input it needs. Next, the headers and
+body can be retrieved for use in sending the email through an MDA/MTA
+(|06.1|). The [hdrs2Str] and [body2Str] methods are used to output the
+MimeMail formatted headers and body respectively:
+
+	<?php
+		echo $tmime->hdrs2Str(); # prints out the headers
+		echo "\n";               # MTA/MDA usually adds this for you
+		echo $tmime->body2Str(); # prints out the body
+	?>
+
+The above code outputs:
+
+		MIME-Version: 1.0
+		Date: Fri,  7 May 2004 20:10:07 -0700 (PDT)
+		Content-Type: text/plain;
+				charset="us-ascii"
+		Content-Transfer-Encoding: 7bit
+		Content-Length: 91
+
+		Hello World,
+
+		Messages created with MimeMail are RFC compliant!
+
+		All the best,
+		Jhaura
+
+==============================================================================
+*04.3* Generating an HTML Message                           *mimemail-htmlmsg*
+
+To create an HTML MIME message follow the same steps as for the plain text
+version, replacing text specific parameter values with HTML values:
+
+	<?php
+		$hmime =& new MimeMail(array(
+			'type'     => 'text/html',          # HTML MIME type
+			'data'     => $htmlmsg,             # HTML message body
+			'charset'  => 'iso-8859-1',         # larger charset for HTML
+			'encoding' => 'quoted-printable')); # keep lines short, encode in qp
+
+		echo $hmime->hdrs2Str(); # prints out the headers
+		echo "\n";               # MTA/MDA usually adds this
+		echo $hmime->body2Str(); # prints out the body
+	?>
+
+The above code outputs:
+
+		MIME-Version: 1.0
+		Date: Fri,  7 May 2004 20:10:07 -0700 (PDT)
+		Content-Type: text/html;
+				charset="iso-8859-1"
+		Content-Transfer-Encoding: quoted-printable
+		Content-Length: 235
+
+		<html>
+		<head>
+		<title>MIME Class 1.0 Documentation HTML Example</title>
+		</head>
+		<body>
+		<b>Hello World</b>,
+		<p>
+		Messages created with MimeMail are RFC compliant!
+		</p>
+		All the best,
+		<br />
+		Jhaura
+		</body>
+		</html>
+
+==============================================================================
+*04.4* Generating a Multipart-Alternative MIME Message     *mimemail-mpartmsg*
+
+A multipart-alternative message is often used to send an HTML message with a
+text backup to a recipient with unknown rendering capabilities. If the MUA of
+the recipient is unable to render HTML, the next viable alternative is
+displayed, in this case the text version.
+
+To create this type of message the PHP MimeMail class separates the message
+into 'parts.' Each part is created separately using class methods as the user
+works through each step.
+
+The first part will always be the 'top part,' an object reference containing
+the general MIME/SMTP headers and a boundary delimiter which separates and
+orders the 'message parts.' The top part object is created by calling the
+constructor with the 'type' parameter set to a multipart type (other headers
+may also be added, but the type parameter is required):
+
+	<?php
+		$mmime =& new MimeMail(array('type' => 'multipart/alternative'));
+	?>
+
+After creating the top part, individual 'message parts' may be added. A
+message part refers to either the text, HTML or other version of the message
+which will be packaged together into one multipart message. Message parts
+should be added in order from least complex to most complex, i.e., text first
+then HTML per the MIME RFCs.
+
+Individual message parts are created using the [part] method. The [part]
+method creates a reference to a modifiable object each time it is called
+(essentially a new MimeMail object within the top part object). As such the
+part method is always called from the top part object reference ($mmime in
+this case). Users of PHP 4x or lower will need to add the assign by reference
+ampersand when creating parts so that each part object is modifiable.
+
+Create the text part using the same procedure as for a simple text message
+(|04.2|), except call the [part] method from within the top part object:
+
+	<?php
+		$tpart =& $mmime->part(array(
+			'type'     => 'text/plain',
+			'data'     => $textmsg,
+			'charset'  => 'us-ascii',
+			'encoding' => '7bit'));
+	?>
+
+Create the html part using the HTML message body:
+
+	<?php
+		$hpart =& $mmime->part(array(
+			'type'     => 'text/html',
+			'data'     => $htmlmsg,
+			'charset'  => 'iso-8859-1',
+			'encoding' => 'quoted-printable'));
+
+		echo $mmime->hdrs2Str();
+		echo "\n";
+		echo $mmime->body2Str();
+	?>
+
+The above code outputs:
+
+		MIME-Version: 1.0
+		Date: Fri,  7 May 2004 20:10:07 -0700 (PDT)
+		Content-Type: multipart/alternative;
+				boundary="_----=_Part_278ec89a148a9ff6fd2faf2e9798d0db_"
+
+		This is a multi-part message in MIME format.
+
+		--_----=_Part_278ec89a148a9ff6fd2faf2e9798d0db_
+		Content-Type: text/plain;
+				charset="us-ascii"
+		Content-Transfer-Encoding: 7bit
+		Content-Length: 91
+
+		Hello World,
+
+		Messages created with MimeMail are RFC compliant!
+
+		All the best,
+		Jhaura
+		--_----=_Part_278ec89a148a9ff6fd2faf2e9798d0db_
+		Content-Type: text/html;
+				charset="iso-8859-1"
+		Content-Transfer-Encoding: quoted-printable
+		Content-Length: 235
+
+		<html>
+		<head>
+		<title>MIME Class 1.0 Documentation HTML Example</title>
+		</head>
+
+		<body>
+		<b>Hello World</b>,
+		<p>
+		Messages created with MimeMail are RFC compliant!
+		</p>
+		All the best,
+		<br />
+		Jhaura
+		</body>
+		</html>
+		--_----=_Part_278ec89a148a9ff6fd2faf2e9798d0db_--
+
+==============================================================================
+*05.1* Headers - The [add] and [attr] Methods                  *mimemail-hdrs*
+
+The powerful [add] and [attr] methods allow users to add, modify, delete and
+retrieve the current value for any existing header. As the example will show,
+this applies to headers set by the user or the class itself.
+
+The [add] method is for use with non-MIME headers such as From: and Subject:
+while the [attr] method is for use with the MIME Content-* headers. Each
+method expects a header name (case-insensitive) and a header value as input.
+
+:TRICKY: The complete real header name must be entered when using the [add] or
+[attr] methods, such as 'content-transfer-encoding,' not just 'encoding.'
+
+:SPECIAL: The [add] and [attr] methods only modify headers set in the object
+reference used to call them. When working with multipart messages, special
+care must be taken to distinguish which object reference contains the header/s
+to be modified. For example, in the Multipart example (|04.4|) three message
+parts were created: top, text and html. Each part was assigned an object
+reference: $mmime, $tpart and $hpart respectively. Calling the header methods
+from one of these references only modifies the headers for that part.
+
+==============================================================================
+*05.2* Adding Headers                                       *mimemail-addhdrs*
+
+Many useful headers that are optional for SMTP and MIME can be easily added
+using the [add] and [attr] methods. Here, the four core headers normally used
+in personal email are pushed into the $tmime object (|02.1|).
+
+Notice the use of the [format] method in the To: header. This helper method
+formats a person's name and email address into the proper format of "Joe
+Recipient" <joe@dev.null> (see Formatting Headers |05.6|):
+
+	<?php
+		$tmime->add('from', 'me@dev.null');
+		$tmime->add('reply-to', 'me@dev.null');
+		$tmime->add('subject', 'MimeMail class message subject.');
+		$tmime->add('to', $tmime->format('joe@dev.null','Joe Recipient'));
+	?>
+
+Reprinting the headers shows the newly added headers along with the
+previously existing headers:
+
+	<?php
+		echo $tmime->hdrs2Str();
+	?>
+
+The above code outputs:
+
+		MIME-Version: 1.0
+		Date: Fri,  7 May 2004 20:10:07 -0700 (PDT)
+		From: me@dev.null
+		Reply-To: me@dev.null
+		Subject: MimeMail class message subject.
+		To: "Joe Recipient" <joe@dev.null>
+		Content-Type: text/plain;
+				charset="us-ascii"
+		Content-Transfer-Encoding: 7bit
+		Content-Length: 91
+
+==============================================================================
+*05.3* Retrieving Header Values                             *mimemail-gethdrs*
+
+Calling the [add] or [attr] methods with only the first argument set returns
+the current value of the header.
+
+In this example the top part's date header value and the content-types of the
+two message parts are retrieved (using the Multipart example |04.4|):
+
+	<?php
+		$topdate  = $mmime->add('date');            # top part date
+		$texttype = $tpart->attr('content-type'); # text message part c-type
+		$htmltype = $hpart->attr('content-type'); # html message part c-type
+
+		echo "Top Date : $topdate\n";
+		echo "Text Type: $texttype\n";
+		echo "HTML Type: $htmltype";
+	?>
+
+The above code outputs:
+
+		Top Date : Fri,  7 May 2004 20:10:07 -0700 (PDT)
+		Text Type: text/plain
+		HTML Type: text/html
+
+==============================================================================
+*05.4* Modifying Header Values                              *mimemail-modhdrs*
+
+To change or modify an existing header, simply call the [add] or [attr]
+methods with both arguments set. Both methods work by first deleting the
+current value before reseting it:
+
+	<?php
+		$hmime->add('from', 'you@dev.null');              # change from header
+		$hmime->attr('content-type.charset', 'us-ascii'); # change charset
+
+		# Change encoding in the HTML part by calling with $hpart
+		$hpart->attr('content-transfer-encoding', '8bit');
+
+		echo 'From    : ' . $hmime->add('from') . "\n";
+		echo 'Charset : ' . $hmime->attr('content-type.charset') . "\n";
+		echo 'Encoding: ' . $hpart->attr('content-transfer-encoding');
+	?>
+
+The above code outputs:
+
+		From    : you@dev.null
+		Charset : us-ascii
+		Encoding: 8bit
+
+==============================================================================
+*05.5* Deleting Headers                                     *mimemail-delhdrs*
+
+To delete a header call the [add] or [attr] methods with the second argument
+set to an empty string ''. Setting it to anything else will change or retrieve
+the header value:
+
+	<?php
+		$tmime->add('reply-to', '');        # delete reply-to header
+		$tmime->attr('content-length', ''); # delete content-length header
+
+		# Delete encoding in Text part by calling with $tpart
+		$tpart->attr('content-transfer-encoding', '');
+
+		echo 'Reply-To: ' . $tmime->add('reply-to') . "\n";
+		echo 'Length  : ' . $tmime->attr('content-length') . "\n";
+		echo 'Encoding: ' . $tpart->attr('content-transfer-encoding');
+	?>
+
+The above code outputs:
+
+		Reply-To:
+		Length  :
+		Encoding:
+
+==============================================================================
+*05.6* Formatting Headers Containing Email Addresses        *mimemail-fmthdrs*
+
+The [format] method is a helper function for use in formatting the common
+name/email pair used in the To:, Cc:, Bcc:, From: and Reply-To: headers. If
+the comment argument is empty, only the email address will be returned
+unformatted.
+
+	<?php
+		echo $tmime->format('joe@dev.null','Joe Recipient');
+		echo "\n";
+		echo $tmime->format('joe@dev.null','');
+	?>
+
+The above code outputs:
+
+		"Joe Recipient" <joe@dev.null>
+		joe@dev.null
+
+==============================================================================
+*06.1* Sending Mail via an MDA/MTA                             *mimemail-send*
+
+The MimeMail class focuses on generating RFC compliant message headers and
+bodies, as such an MDA/MTA is needed for message delivery. Common options are
+PHP's mail() function and pipes to Sendmail or qmail.
+
+:WARNING: <CRLF> (\n, \r\n, \r) Issue. Terrible display issues will result at
+the recipient end if the proper <CRLF> sequence is not set in the message
+(both headers and body). RFC 2821 2.3.7 and 2822 2.1 state that a <CRLF>
+consists of two characters - ASCII 13 immediately followed by ASCII 10. In
+escape sequence style this would be \r\n. For proper display and MIME
+compliance, all parts of a message (headers and body) must have normalized
+<CRLF>s *after* passing through the MDA/MTA of choice. Many MDA/MTAs will
+modify a message when passed through, so a post-check is necessary on the
+final output.
+
+Depending on the message composition platform *and* the MDA/MTA, the message
+could have a mix of <CRLF> styles (\n for *nix, \r for Mac and \r\n for PC).
+Check the PHP online manual mail() function comments for horror stories and
+solutions. The author recommendation is to normalize <CRLF>s based on the
+originating platform prior to passing to an MDA/MTA. For example, if a *nix
+platform is used is normalize all <CRLF>s to \n. Depending of the MDA/MTA
+these will be converted to RFC <CRLF> when passed through, however, this
+cannot be guaranteed, so test, test and...
+
+==============================================================================
+*06.2* Using PHP's mail() Function                          *mimemail-phpsend*
+
+The easiest way to deliver a newly created MimeMail message is via PHP's
+mail() function. Using the core MimeMail output methods [hdrs2Str] and
+[body2Str] the two key arguments (headers and body strings) used in the mail()
+function are easily created. All that is left is to set the message recipient
+and subject.
+
+For this example the HTML Message object ($hmime, |04.3|) will be used:
+
+	<?php
+		# Setup variables with desired values.
+		$to      = 'sue@dev.null';     # our friend Sue, the recipient
+		$subject = 'Hello Sue!';       # subject
+		$message = $hmime->body2Str(); # output message body to string
+		$headers = $hmime->hdrs2Str(); # output message headers to string
+
+		# Input into PHP's mail() function.
+		$res = mail($to, $subject, $message, $headers); # send mail
+
+		# Verify mail was sent.
+		echo ($res) ? 'Mail Sent!' : 'Mail Error!';
+	?>
+
+==============================================================================
+*07.1* Return-Path and Bounce Addresses                      *mimemail-bounce*
+
+When working with mailing lists or scripted mailings it is a good idea to
+specify an email address where errors will be sent for cases when the message
+can't be delivered. The following three headers (in order of importance) do
+the trick with most SMTP systems.
+
+Note: Many MDA/MTAs add these for you. Setting these headers at this point
+will override that feature.
+
+The placeholder 'bounce-addr' should be replaced with an appropriate bounce
+address in VERP or other format. A simple email address such as the From:
+address can also be used, in which case the sender will receive any error
+mail:
+
+	<?php
+		$tmime->add('return-path', 'bounce-addr');
+		$tmime->add('errors-to', 'bounce-addr');
+		$tmime->add('bounces-to', 'bounce-addr');
+
+		echo $tmime->hdrs2Str();
+	?>
+
+The above code outputs:
+
+		MIME-Version: 1.0
+		Date: Wed, 19 May 2004 12:19:46 -0700 (PDT)
+		From: me@dev.null
+		Subject: MIME class message subject.
+		To: "Joe Recipient" <joe@dev.null>
+		Return-Path: bounce-addr
+		Errors-To: bounce-addr
+		Bounces-To: bounce-addr
+		Content-Type: text/plain;
+			 charset="us-ascii"
+		Content-Transfer-Encoding: 7bit
+
+==============================================================================
+*08.1* Printing Headers and Body as a Single String         *mimemail-all2str*
+
+The [all2Str] method can be used when the entire message needs to be returned
+as a single string. The example shown here uses the HTML Message version
+(|04.3|):
+
+	<?php
+		echo $hmime->all2Str();
+	?>
+
+The above code outputs:
+
+		MIME-Version: 1.0
+		Date: Wed, 19 May 2004 12:19:46 -0700 (PDT)
+		From: you@dev.null
+		Content-Type: text/html;
+			 charset="us-ascii"
+		Content-Transfer-Encoding: quoted-printable
+		Content-Length: 214
+
+		<html>
+		<head>
+		<title>MIME Class 1.0 Documentation HTML Example</title>
+		</head>
+		<body>
+		<b>Hello World</b>,
+		<p>
+		Messages created with MimeMail are RFC compliant!
+		</p>
+		All the best,
+		<br />
+		Jhaura
+		</body>
+		</html>
+
+==============================================================================
+*09.1* Comments and Bugs                                       *mimemail-bugs*
+
+Feedback is appreciated and should be sent to the author listed at the
+beginning of this file. Implementation and usage scenarios are also welcomed.
+
+TODO add documentation for attaching files.
+
+EOF vim:tw=78:ts=2:ft=help:norl:isk=!-~,^*,^|,^":

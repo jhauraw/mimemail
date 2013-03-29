@@ -1,0 +1,7 @@
+.config
+tmp
+*.DS_Store
+Icon?
+Thumbs.db
+.sass-cache/*
+*.sublime-*
